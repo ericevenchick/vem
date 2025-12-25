@@ -50,20 +50,36 @@ fn hashDir(path: []const u8) ![hashSize]u8 {
 
     var hasher = std.crypto.hash.Blake3.init(.{});
 
+    // iterate over files in this dir, collecting paths
     var dir_iter = dir.iterate();
-
+    var paths: std.ArrayList([]const u8) = .empty;
+    defer paths.deinit(alloc);
     while (try dir_iter.next()) |ent| {
         const path_segments = &[_][]const u8{ path, ent.name };
         const ent_path = try std.fs.path.join(alloc, path_segments);
         defer alloc.free(ent_path);
 
-        std.debug.print("-> {s}\n", .{ent_path});
-        const ent_hash = try hashAny(ent_path);
-        hasher.update(&ent_hash);
+        try paths.append(alloc, try alloc.dupe(u8, ent_path));
+    }
+
+    // sort the paths
+    std.mem.sort([]const u8, paths.items, {}, struct {
+        fn lessThan(_: void, a: []const u8, b: []const u8) bool {
+            return std.ascii.lessThanIgnoreCase(a, b);
+        }
+    }.lessThan);
+
+    // hash the paths recursively
+    for (paths.items) |p| {
+        std.debug.print("-> {s}\n", .{p});
+        const hash = try hashAny(p);
+        hasher.update(&hash);
     }
 
     var digest: [32]u8 = undefined;
     hasher.final(&digest);
+
+    std.debug.print("dir hash {s} -> {X}\n", .{ path, digest });
 
     return digest;
 }

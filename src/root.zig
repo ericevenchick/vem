@@ -7,7 +7,7 @@ const testing = std.testing;
 pub const hashSize = 32;
 pub const encodedHashSize = base32.std_encoding.encodeLen(hashSize);
 
-const HashingError = error{ UnsupportedFileType, OutOfMemory } || std.fs.Dir.StatFileError || std.fs.File.ReadError;
+const HashingError = error{ UnsupportedFileType, OutOfMemory, ReadFailed } || std.fs.Dir.StatFileError || std.fs.File.ReadError;
 
 pub fn hashAny(path: []const u8) HashingError![hashSize]u8 {
     const stat = try std.fs.cwd().statFile(path);
@@ -24,12 +24,16 @@ fn hashFile(path: []const u8) ![hashSize]u8 {
     var file = try std.fs.cwd().openFile(path, .{});
     defer file.close();
 
-    var hasher = std.crypto.hash.Blake3.init(.{});
-    var buf: [4096]u8 = undefined;
+    var hasher = std.crypto.hash.sha2.Sha256.init(.{});
+    var buf: [256 * 1024]u8 = undefined;
+    var r = file.reader(&buf);
+    const reader = &r.interface;
+
+    var chunk: [64 * 1024]u8 = undefined;
     while (true) {
-        const n = try file.read(&buf);
+        const n = try reader.readSliceShort(&chunk);
         if (n == 0) break;
-        hasher.update(buf[0..n]);
+        hasher.update(chunk[0..n]);
     }
 
     var digest: [32]u8 = undefined;
@@ -40,17 +44,16 @@ fn hashFile(path: []const u8) ![hashSize]u8 {
 }
 
 fn hashDir(path: []const u8) ![hashSize]u8 {
+    var alloc = std.heap.page_allocator;
     var dir = try std.fs.cwd().openDir(path, .{ .iterate = true });
     defer dir.close();
 
     var hasher = std.crypto.hash.Blake3.init(.{});
 
-    const alloc = std.heap.page_allocator;
-    var walker = try dir.walk(alloc);
-    defer walker.deinit();
+    var dir_iter = dir.iterate();
 
-    while (try walker.next()) |ent| {
-        const path_segments = &[_][]const u8{ path, ent.path };
+    while (try dir_iter.next()) |ent| {
+        const path_segments = &[_][]const u8{ path, ent.name };
         const ent_path = try std.fs.path.join(alloc, path_segments);
         defer alloc.free(ent_path);
 

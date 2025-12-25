@@ -4,9 +4,23 @@
 const std = @import("std");
 const testing = std.testing;
 
-pub const fileHashSize = base32.std_encoding.encodeLen(32);
+pub const hashSize = 32;
+pub const encodedHashSize = base32.std_encoding.encodeLen(hashSize);
 
-pub fn hashFile(dest: []u8, path: []const u8) ![]const u8 {
+const HashingError = error{ UnsupportedFileType, OutOfMemory } || std.fs.Dir.StatFileError || std.fs.File.ReadError;
+
+pub fn hashAny(path: []const u8) HashingError![hashSize]u8 {
+    const stat = try std.fs.cwd().statFile(path);
+    const hash = try switch (stat.kind) {
+        .file => hashFile(path),
+        .directory => hashDir(path),
+        else => return error.UnsupportedFileType,
+    };
+
+    return hash;
+}
+
+fn hashFile(path: []const u8) ![hashSize]u8 {
     var file = try std.fs.cwd().openFile(path, .{});
     defer file.close();
 
@@ -20,10 +34,39 @@ pub fn hashFile(dest: []u8, path: []const u8) ![]const u8 {
 
     var digest: [32]u8 = undefined;
     hasher.final(&digest);
+    std.debug.print("file hash {s} -> {X}\n", .{ path, digest });
 
-    const out = base32.std_encoding.encode(dest, &digest);
+    return digest;
+}
 
-    return out;
+fn hashDir(path: []const u8) ![hashSize]u8 {
+    var dir = try std.fs.cwd().openDir(path, .{ .iterate = true });
+    defer dir.close();
+
+    var hasher = std.crypto.hash.Blake3.init(.{});
+
+    const alloc = std.heap.page_allocator;
+    var walker = try dir.walk(alloc);
+    defer walker.deinit();
+
+    while (try walker.next()) |ent| {
+        const path_segments = &[_][]const u8{ path, ent.path };
+        const ent_path = try std.fs.path.join(alloc, path_segments);
+        defer alloc.free(ent_path);
+
+        std.debug.print("-> {s}\n", .{ent_path});
+        const ent_hash = try hashAny(ent_path);
+        hasher.update(&ent_hash);
+    }
+
+    var digest: [32]u8 = undefined;
+    hasher.final(&digest);
+
+    return digest;
+}
+
+pub fn encodeHash(dest: []u8, hash: []const u8) ![]const u8 {
+    return base32.std_encoding.encode(dest, hash);
 }
 
 const base32 = @import("base32");

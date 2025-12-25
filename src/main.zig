@@ -46,13 +46,16 @@ pub fn main() !void {
 }
 
 fn runAdd(args: []const u8) !void {
-    var buf: [lib.fileHashSize]u8 = undefined;
-    const hash = lib.hashFile(&buf, args) catch |err| {
+    const hash = lib.hashAny(args) catch |err| {
         std.debug.print("Error hashing file {s}\n", .{@errorName(err)});
         return;
     };
 
-    std.debug.print("{s}\n", .{hash});
+    var buf: [lib.encodedHashSize]u8 = undefined;
+    const enc = lib.encodeHash(&buf, &hash) catch |err| {
+        std.debug.print("Error encoding hash {s}", .{@errorName(err)});
+    };
+    std.debug.print("{s}\n", .{enc});
 }
 
 const std = @import("std");

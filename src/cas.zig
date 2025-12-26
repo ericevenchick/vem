@@ -26,7 +26,7 @@ pub fn addAny(alloc: std.mem.Allocator, path: []const u8) CasError![hashSize]u8 
 }
 
 fn addFile(alloc: std.mem.Allocator, path: []const u8) ![hashSize]u8 {
-    const hash = try hashFile(path);
+    const hash = try hashFile(alloc, path);
     const cas_path = try blobcasPath(alloc, hash);
     defer alloc.free(cas_path);
 
@@ -38,7 +38,7 @@ fn addFile(alloc: std.mem.Allocator, path: []const u8) ![hashSize]u8 {
 pub fn hashAny(alloc: std.mem.Allocator, path: []const u8) CasError![hashSize]u8 {
     const stat = try std.fs.cwd().statFile(path);
     const hash = try switch (stat.kind) {
-        .file => hashFile(path),
+        .file => hashFile(alloc, path),
         .directory => hashDir(alloc, path),
         else => return error.UnsupportedFileType,
     };
@@ -46,13 +46,19 @@ pub fn hashAny(alloc: std.mem.Allocator, path: []const u8) CasError![hashSize]u8
     return hash;
 }
 
-fn hashFile(path: []const u8) ![hashSize]u8 {
+fn hashFile(alloc: std.mem.Allocator, path: []const u8) ![hashSize]u8 {
     var file = try std.fs.cwd().openFile(path, .{});
     defer file.close();
 
     const stat = try file.stat();
 
     var hasher = std.crypto.hash.sha2.Sha256.init(.{});
+
+    // add the git reader
+    const header = try std.fmt.allocPrint(alloc, "blob {d}\x00", .{stat.size});
+    defer alloc.free(header);
+    hasher.update(header);
+
     var buf: [256 * 1024]u8 = undefined;
     var r = file.reader(&buf);
     const reader = &r.interface;

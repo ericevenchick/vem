@@ -1,5 +1,6 @@
 const SubCmd = enum {
     add,
+    hash,
 };
 
 fn parseSubcommand(cmd: []const u8) ?SubCmd {
@@ -7,7 +8,7 @@ fn parseSubcommand(cmd: []const u8) ?SubCmd {
 }
 
 pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    var gpa = std.heap.DebugAllocator(.{}){};
     defer _ = gpa.deinit();
 
     const parsers = comptime .{ .COMMAND = clap.parsers.enumeration(SubCmd), .ARGS = clap.parsers.string };
@@ -41,21 +42,26 @@ pub fn main() !void {
     };
 
     switch (cmd) {
-        .add => try runAdd(res.positionals[1] orelse ""),
+        .add => try runAdd(gpa.allocator(), res.positionals[1] orelse ""),
+        .hash => try runHash(gpa.allocator(), res.positionals[1] orelse ""),
     }
 }
 
-fn runAdd(args: []const u8) !void {
-    const hash = lib.hashAny(args) catch |err| {
+fn runHash(alloc: std.mem.Allocator, args: []const u8) !void {
+    const hash = lib.cas.hashAny(alloc, args) catch |err| {
         std.debug.print("Error hashing file {s}\n", .{@errorName(err)});
         return;
     };
 
-    var buf: [lib.encodedHashSize]u8 = undefined;
-    const enc = lib.encodeHash(&buf, &hash) catch |err| {
-        std.debug.print("Error encoding hash {s}", .{@errorName(err)});
+    std.debug.print("{x}\n", .{hash});
+}
+
+fn runAdd(alloc: std.mem.Allocator, args: []const u8) !void {
+    const hash = lib.cas.addAny(alloc, args) catch |err| {
+        std.debug.print("Error adding file {s}\n", .{@errorName(err)});
+        return;
     };
-    std.debug.print("{s}\n", .{enc});
+    std.debug.print("{x}\n", .{hash});
 }
 
 const std = @import("std");

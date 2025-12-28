@@ -108,7 +108,7 @@ pub const CasStore = struct {
         // sort the paths
         std.mem.sort([]const u8, paths.items, {}, struct {
             fn lessThan(_: void, a: []const u8, b: []const u8) bool {
-                return std.ascii.lessThanIgnoreCase(a, b);
+                return std.mem.lessThan(u8, a, b);
             }
         }.lessThan);
 

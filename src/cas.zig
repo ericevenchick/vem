@@ -97,12 +97,10 @@ pub const CasStore = struct {
         // iterate over files in this dir, collecting paths
         var dir_iter = dir.iterate();
         var paths: std.ArrayList([]const u8) = .empty;
-        //defer paths.deinit(arena);
 
         while (try dir_iter.next()) |ent| {
             const path_segments = &[_][]const u8{ path, ent.name };
             const ent_path = try std.fs.path.join(arena, path_segments);
-            //defer arena.free(ent_path);
 
             try paths.append(arena, try arena.dupe(u8, ent_path));
         }

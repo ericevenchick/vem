@@ -48,7 +48,8 @@ pub fn main() !void {
 }
 
 fn runHash(alloc: std.mem.Allocator, args: []const u8) !void {
-    const hash = lib.cas.hashAny(alloc, args) catch |err| {
+    var cas = lib.cas.CasStore.init(alloc);
+    const hash = cas.hashAny(args) catch |err| {
         std.debug.print("Error hashing file {s}\n", .{@errorName(err)});
         return;
     };
@@ -57,7 +58,8 @@ fn runHash(alloc: std.mem.Allocator, args: []const u8) !void {
 }
 
 fn runAdd(alloc: std.mem.Allocator, args: []const u8) !void {
-    const hash = lib.cas.addAny(alloc, args) catch |err| {
+    var cas = lib.cas.CasStore.init(alloc);
+    const hash = cas.addAny(args) catch |err| {
         std.debug.print("Error adding file {s}\n", .{@errorName(err)});
         return;
     };
